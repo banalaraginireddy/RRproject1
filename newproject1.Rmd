@@ -1,0 +1,132 @@
+---
+title: "project.Rmd"
+author: "RAGINI"
+date: "19/08/2020"
+output: html_document
+---
+##Step 1
+##Code for reading in the dataset and/or processing the data
+```{r, echo = TRUE}
+setwd("C:/Users/Ragini Banala/Downloads")
+activity<-read.csv("activity.csv")
+```
+Exploring the basics of this data
+```{r, echo = TRUE}
+dim(activity)
+names(activity)
+head(activity)
+str(activity)
+#total number of missing data
+sum(is.na(activity$steps))/dim(activity)[[1]]
+#transforming the date column into date format using lubridate
+library(lubridate)
+activity$date<-ymd(activity$date)
+length(unique(activity$date))
+```
+##Step 2
+##Histogram of the total number of steps taken each day
+
+```{r, echo = TRUE}
+StepsPerDay <- aggregate(activity$steps, list(activity$date), FUN=sum)
+colnames(StepsPerDay) <- c("Date", "Steps")
+StepsPerDay
+library(ggplot2)
+png("plot1.png")
+g <- ggplot(StepsPerDay, aes(Steps))
+g+geom_histogram(boundary=0, binwidth=2500, col="darkgreen", fill="lightgreen")+ggtitle("Histogram of steps per day")+xlab("Steps")+ylab("Frequency")+theme(plot.title = element_text(face="bold", size=12))+scale_x_continuous(breaks=seq(0,25000,2500))+scale_y_continuous(breaks=seq(0,18,2))
+dev.off()
+```
+##Step 3
+##Mean and median number of steps taken each day
+
+```{r, echo = TRUE}
+#mean
+mean(StepsPerDay$Steps, na.rm=TRUE)
+
+#Median
+median(StepsPerDay$Steps, na.rm=TRUE)
+
+```
+##Step 4
+##Time series plot of the average number of steps taken
+```{r, echo = TRUE}
+# create table with steps per time
+StepsPerTime <- aggregate(steps~interval,data=activity,FUN=mean,na.action=na.omit)
+# variable time (more comprensible for the graph axis)
+StepsPerTime$time <- StepsPerTime$interval/100
+# draw the line plot
+png("plot2.png")
+h <- ggplot(StepsPerTime, aes(time, steps))
+h+geom_line(col="brown")+ggtitle("Average steps per time interval")+xlab("Time")+ylab("Steps")+theme(plot.title = element_text(face="bold", size=12))
+dev.off()
+```
+##Step 5
+##The 5-minute interval that, on average, contains the maximum number of steps
+
+```{r, echo = TRUE}
+# table for dplyr
+library(dplyr)
+ST <- tbl_df(StepsPerTime)
+# find the column
+ST %>% select(time, steps) %>% filter(steps==max(ST$steps))
+```
+##Imputing missing values
+###First, we calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs):
+```{r}
+sum(is.na(activity$steps))
+#So the original data set has 2304 rows with missing data.
+
+#We use a simple strategy for filling in all of the missing values in the dataset. If a 5-minute interval has missing value, we use the mean for that 5-minute interval.
+
+#We create a new data frame df_impute that is equal to the original dataset but with the missing data filled in (using mean for that interval for imputation):
+activity$date <- as.Date(activity$date)
+df_ign <- subset(activity, !is.na(activity$steps))
+df_impute <- activity
+ndx <- is.na(df_impute$steps)
+int_avg <- tapply(df_ign$steps, df_ign$interval, mean, na.rm=TRUE, simplify=T)
+
+df_impute$steps[ndx] <- int_avg[as.character(df_impute$interval[ndx])]
+
+new_dailysum <- tapply(df_impute$steps, df_impute$date, sum, na.rm=TRUE, simplify=T)
+png("plot3.png")
+hist(x=new_dailysum,
+     col="red",
+     breaks=20,
+     xlab="daily steps",
+     ylab="frequency",
+     main="The distribution of daily total (with missing data imputed)")
+dev.off()
+mean(new_dailysum)
+
+median(new_dailysum)
+```
+
+##Are there differences in activity patterns between weekdays and weekends?
+###First we create a new factor variable “wk” in the dataset with two levels - “weekday” and “weekend” indicating whether a given date is a weekday or weekend day.
+```{r}
+
+# helper function to decide if a day is a week day or not
+is_weekday <- function(d) {
+    wd <- weekdays(d)
+    ifelse (wd == "Saturday" | wd == "Sunday", "weekend", "weekday")
+}
+
+wx <- sapply(df_impute$date, is_weekday)
+df_impute$wk <- as.factor(wx)
+head(df_impute)
+
+wk_df <- aggregate(steps ~ wk+interval, data=df_impute, FUN=mean)
+#Next we make a panel plot containing a time series plot (i.e. type = “l”) of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis).
+
+library(lattice)
+png("plot4.png")
+xyplot(steps ~ interval | factor(wk),
+       layout = c(1, 2),
+       xlab="Interval",
+       ylab="Number of steps",
+       type="l",
+       lty=1,
+       data=wk_df)
+dev.off()
+```
+
